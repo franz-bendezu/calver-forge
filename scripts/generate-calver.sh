@@ -88,6 +88,10 @@ for ((attempt = 1; attempt <= max_attempts; attempt++)); do
     printf 'Could not create %s (GitHub API HTTP %s)\n' "$tag" "$status" >&2
     exit 1
   fi
+  if ! grep -Eq '"code"[[:space:]]*:[[:space:]]*"already_exists"' "$response_file"; then
+    printf 'GitHub rejected %s (HTTP 422 without a tag collision)\n' "$tag" >&2
+    exit 1
+  fi
   minimum_next=$((increment + 1))
   if (( attempt < max_attempts )); then
     sleep "$retry_delay"

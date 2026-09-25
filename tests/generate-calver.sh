@@ -40,12 +40,17 @@ case $TEST_MODE in
   collision)
     if [[ ! -f $COLLISION_MARKER ]]; then
       touch "$COLLISION_MARKER"
+      printf '{"errors":[{"code":"already_exists"}]}\n' > "$output_file"
       printf '422'
     else
       printf '201'
     fi
     ;;
-  always_collision) printf '422' ;;
+  always_collision)
+    printf '{"errors":[{"code":"already_exists"}]}\n' > "$output_file"
+    printf '422'
+    ;;
+  invalid_ref) printf '422' ;;
   *) printf '201' ;;
 esac
 MOCK
@@ -94,6 +99,12 @@ fi
 export CALVER_COUNTER_START=invalid
 if bash "$project_dir/scripts/generate-calver.sh"; then
   printf 'Expected invalid counter input to fail\n' >&2
+  exit 1
+fi
+
+export CALVER_COUNTER_START=4 TEST_MODE=invalid_ref
+if bash "$project_dir/scripts/generate-calver.sh"; then
+  printf 'Expected non-collision validation error to fail\n' >&2
   exit 1
 fi
 
