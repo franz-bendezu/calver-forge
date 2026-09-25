@@ -9,5 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate action metadata
+        run: ruby -e "require 'yaml'; YAML.load_file('action.yml')"
       - name: Test CalVer generation
         run: bash tests/generate-calver.sh

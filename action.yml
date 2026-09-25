@@ -2,7 +2,7 @@ name: CalVer Forge
 description: Create a configurable UTC calendar-version tag in the caller repository
 inputs:
   github_token:
-    description: Token with contents: write permission in the caller repository
+    description: 'Token with contents: write permission in the caller repository'
     required: true
   date_format:
     description: UTC date format using GNU date strftime directives
