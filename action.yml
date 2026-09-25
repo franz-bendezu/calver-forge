@@ -1,15 +1,43 @@
-name: Generate CalVer Version
-description: Create a UTC calendar-version tag (vYYYY.MM.DD.N) in the caller repository
+name: CalVer Forge
+description: Create a configurable UTC calendar-version tag in the caller repository
 inputs:
   github_token:
     description: Token with contents: write permission in the caller repository
     required: true
+  date_format:
+    description: UTC date format using GNU date strftime directives
+    required: false
+    default: '%Y.%m.%d'
+  tag_prefix:
+    description: Prefix before the date in the Git tag
+    required: false
+    default: v
+  separator:
+    description: Separator between the date and counter
+    required: false
+    default: '.'
+  counter_start:
+    description: First counter value when no matching tag exists
+    required: false
+    default: '1'
+  counter_width:
+    description: Minimum counter width, padded with leading zeroes
+    required: false
+    default: '0'
+  max_attempts:
+    description: Maximum tag-creation attempts after collisions
+    required: false
+    default: '5'
+  retry_delay_seconds:
+    description: Seconds to wait after a tag collision
+    required: false
+    default: '1'
 outputs:
   version:
-    description: Calendar version without the v prefix
+    description: Calendar version without the tag prefix
     value: ${{ steps.generate.outputs.version }}
   tag:
-    description: Created Git tag with the v prefix
+    description: Created Git tag including the prefix
     value: ${{ steps.generate.outputs.tag }}
 runs:
   using: composite
@@ -19,4 +47,11 @@ runs:
       shell: bash
       env:
         CALVER_TOKEN: ${{ inputs.github_token }}
+        CALVER_DATE_FORMAT: ${{ inputs.date_format }}
+        CALVER_TAG_PREFIX: ${{ inputs.tag_prefix }}
+        CALVER_SEPARATOR: ${{ inputs.separator }}
+        CALVER_COUNTER_START: ${{ inputs.counter_start }}
+        CALVER_COUNTER_WIDTH: ${{ inputs.counter_width }}
+        CALVER_MAX_ATTEMPTS: ${{ inputs.max_attempts }}
+        CALVER_RETRY_DELAY_SECONDS: ${{ inputs.retry_delay_seconds }}
       run: bash "${{ github.action_path }}/scripts/generate-calver.sh"

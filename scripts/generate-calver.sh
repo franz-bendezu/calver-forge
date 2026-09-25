@@ -6,28 +6,69 @@ set -euo pipefail
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
 
-date_prefix=$(date -u +%Y.%m.%d)
+date_format=${CALVER_DATE_FORMAT:-%Y.%m.%d}
+tag_prefix=${CALVER_TAG_PREFIX-v}
+separator=${CALVER_SEPARATOR-.}
+counter_start=${CALVER_COUNTER_START:-1}
+counter_width=${CALVER_COUNTER_WIDTH:-0}
+max_attempts=${CALVER_MAX_ATTEMPTS:-5}
+retry_delay=${CALVER_RETRY_DELAY_SECONDS:-1}
 api_url=${GITHUB_API_URL:-https://api.github.com}
+
+for value in "$counter_start" "$counter_width" "$max_attempts"; do
+  if [[ ! $value =~ ^(0|[1-9][0-9]*)$ ]]; then
+    printf 'Counter start, counter width, and max attempts must be nonnegative integers\n' >&2
+    exit 1
+  fi
+done
+if (( counter_start < 1 || max_attempts < 1 || counter_width > 12 )); then
+  printf 'Counter start and max attempts must be positive; counter width must be at most 12\n' >&2
+  exit 1
+fi
+if [[ ! $retry_delay =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  printf 'Retry delay must be a nonnegative number of seconds\n' >&2
+  exit 1
+fi
+
+date_token=$(date -u "+$date_format")
+base="${tag_prefix}${date_token}${separator}"
+if [[ ! $base =~ ^[A-Za-z0-9._-]+$ ]]; then
+  printf 'The configured date, prefix, and separator must form a safe Git tag prefix\n' >&2
+  exit 1
+fi
+
 response_file=$(mktemp)
-trap 'rm -f "$response_file"' EXIT
+trap 'rm "$response_file"' EXIT
+minimum_next=$counter_start
 
 next_increment() {
-  local highest=0 ref increment refs
-  refs=$(git ls-remote --refs --tags origin "refs/tags/v${date_prefix}.*" | awk '{print $2}')
+  local highest=$((counter_start - 1)) ref increment refs
+  refs=$(git ls-remote --refs --tags origin "refs/tags/${base}*" | awk '{print $2}')
   while IFS= read -r ref; do
     ref=${ref##*/}
-    increment=${ref#v${date_prefix}.}
+    [[ $ref == "$base"* ]] || continue
+    increment=${ref:${#base}}
     if [[ $increment =~ ^[0-9]+$ ]] && (( 10#$increment > highest )); then
       highest=$((10#$increment))
     fi
   done <<< "$refs"
-  printf '%s\n' "$((highest + 1))"
+  if (( minimum_next > highest )); then
+    printf '%s\n' "$minimum_next"
+  else
+    printf '%s\n' "$((highest + 1))"
+  fi
 }
 
-for attempt in 1 2 3 4 5; do
+for ((attempt = 1; attempt <= max_attempts; attempt++)); do
   increment=$(next_increment)
-  version="${date_prefix}.${increment}"
-  tag="v${version}"
+  if (( counter_width > 0 )); then
+    printf -v displayed_increment "%0${counter_width}d" "$increment"
+  else
+    displayed_increment=$increment
+  fi
+  version="${date_token}${separator}${displayed_increment}"
+  tag="${tag_prefix}${version}"
+  git check-ref-format "refs/tags/$tag"
   payload=$(printf '{"ref":"refs/tags/%s","sha":"%s"}' "$tag" "$GITHUB_SHA")
   status=$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' \
     --request POST \
@@ -47,8 +88,11 @@ for attempt in 1 2 3 4 5; do
     printf 'Could not create %s (GitHub API HTTP %s)\n' "$tag" "$status" >&2
     exit 1
   fi
-  sleep 1
+  minimum_next=$((increment + 1))
+  if (( attempt < max_attempts )); then
+    sleep "$retry_delay"
+  fi
 done
 
-printf 'Could not create a free CalVer tag after five attempts\n' >&2
+printf 'Could not create a free CalVer tag after %s attempts\n' "$max_attempts" >&2
 exit 1
