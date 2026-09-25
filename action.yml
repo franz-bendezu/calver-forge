@@ -1,0 +1,22 @@
+name: Generate CalVer Version
+description: Create a UTC calendar-version tag (vYYYY.MM.DD.N) in the caller repository
+inputs:
+  github_token:
+    description: Token with contents: write permission in the caller repository
+    required: true
+outputs:
+  version:
+    description: Calendar version without the v prefix
+    value: ${{ steps.generate.outputs.version }}
+  tag:
+    description: Created Git tag with the v prefix
+    value: ${{ steps.generate.outputs.tag }}
+runs:
+  using: composite
+  steps:
+    - name: Create CalVer tag
+      id: generate
+      shell: bash
+      env:
+        CALVER_TOKEN: ${{ inputs.github_token }}
+      run: bash "${{ github.action_path }}/scripts/generate-calver.sh"
